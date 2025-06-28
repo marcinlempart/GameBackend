@@ -8,8 +8,8 @@ variables:
   solution: '**/*.sln'
   buildPlatform: 'Any CPU'
   buildConfiguration: 'Release'
-  azureSubscription: 'AzureConnection'        # <- nazwa Service Connection
-  webAppName: 'my-app-service-name'           # <- podaj tutaj nazwę swojego App Service
+  azureSubscription: 'GameAppServiceConnection'   # Twoja Service Connection
+  webAppName: 'my-game-appservice'                # Zmień na swoją nazwę App Service
 
 steps:
 - task: NuGetToolInstaller@1
@@ -30,16 +30,16 @@ steps:
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
 
-# Publikacja artefaktu (zip z aplikacją)
+# (opcjonalne) Publikowanie artefaktów
 - task: PublishBuildArtifacts@1
   inputs:
     PathtoPublish: '$(build.artifactStagingDirectory)'
     ArtifactName: 'drop'
     publishLocation: 'Container'
 
-# Deploy do Azure App Service
+# 👉 Deployment do Azure App Service
 - task: AzureWebApp@1
   inputs:
-    azureSubscription: '$(azureSubscription)'    # musi być skonfigurowana Service Connection
-    appName: '$(webAppName)'                     # nazwa App Service
+    azureSubscription: '$(azureSubscription)'     # <- Twoje połączenie
+    appName: '$(webAppName)'                      # <- Twoja aplikacja
     package: '$(build.artifactStagingDirectory)/WebApp.zip'
