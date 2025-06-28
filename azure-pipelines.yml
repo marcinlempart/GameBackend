@@ -1,8 +1,3 @@
-# ASP.NET Core (.NET Framework)
-# Build and test ASP.NET Core projects targeting the full .NET Framework.
-# Add steps that publish symbols, save build artifacts, and more:
-# https://docs.microsoft.com/azure/devops/pipelines/languages/dotnet-core
-
 trigger:
 - master
 
@@ -13,6 +8,8 @@ variables:
   solution: '**/*.sln'
   buildPlatform: 'Any CPU'
   buildConfiguration: 'Release'
+  azureSubscription: 'AzureConnection'        # <- nazwa Service Connection
+  webAppName: 'my-app-service-name'           # <- podaj tutaj nazwę swojego App Service
 
 steps:
 - task: NuGetToolInstaller@1
@@ -32,3 +29,17 @@ steps:
   inputs:
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
+
+# Publikacja artefaktu (zip z aplikacją)
+- task: PublishBuildArtifacts@1
+  inputs:
+    PathtoPublish: '$(build.artifactStagingDirectory)'
+    ArtifactName: 'drop'
+    publishLocation: 'Container'
+
+# Deploy do Azure App Service
+- task: AzureWebApp@1
+  inputs:
+    azureSubscription: '$(azureSubscription)'    # musi być skonfigurowana Service Connection
+    appName: '$(webAppName)'                     # nazwa App Service
+    package: '$(build.artifactStagingDirectory)/WebApp.zip'
