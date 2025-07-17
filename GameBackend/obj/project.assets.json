@@ -434,11 +434,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\marci\\source\\repos\\GameBackend\\GameBackend\\GameBackend.csproj",
+      "projectUniqueName": "C:\\Users\\marci\\Documents\\GameBackend\\GameBackend\\GameBackend.csproj",
       "projectName": "GameBackend",
-      "projectPath": "C:\\Users\\marci\\source\\repos\\GameBackend\\GameBackend\\GameBackend.csproj",
+      "projectPath": "C:\\Users\\marci\\Documents\\GameBackend\\GameBackend\\GameBackend.csproj",
       "packagesPath": "C:\\Users\\marci\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\marci\\source\\repos\\GameBackend\\GameBackend\\obj\\",
+      "outputPath": "C:\\Users\\marci\\Documents\\GameBackend\\GameBackend\\obj\\",
       "projectStyle": "PackageReference",
       "fallbackFolders": [
         "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
