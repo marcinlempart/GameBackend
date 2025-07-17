@@ -1,4 +1,24 @@
-echo ".vs/" >> .gitignore
-echo "bin/" >> .gitignore
-echo "obj/" >> .gitignore
-echo "vs/GameBackend" >> .gitignore
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.cache
+*.log
+
+# Build output
+bin/
+obj/
+Debug/
+Release/
+
+# NuGet
+*.nupkg
+project.lock.json
+project.assets.json
+*.snupkg
+
+# Rider
+.idea/
+
+# Resharper
+_ReSharper*/
