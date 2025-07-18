@@ -2,7 +2,7 @@ trigger:
 - master
 
 pool:
-  vmImage: 'ubuntu-latest'
+  vmImage: 'windows-latest'
 
 variables:
   solution: '**/*.sln'
@@ -19,20 +19,29 @@ stages:
   jobs:
   - job: Build
     steps:
+    # 🛠️ Install NuGet
     - task: NuGetToolInstaller@1
+
+    # 📦 Restore NuGet packages
     - task: NuGetCommand@2
       inputs:
         restoreSolution: '$(solution)'
+
+    # 🏗️ Build the solution and generate MSBuild ZIP package
     - task: VSBuild@1
       inputs:
         solution: '$(solution)'
         msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:PackageLocation="$(build.artifactStagingDirectory)"'
         platform: '$(buildPlatform)'
         configuration: '$(buildConfiguration)'
+
+    # ✅ Run unit tests
     - task: VSTest@2
       inputs:
         platform: '$(buildPlatform)'
         configuration: '$(buildConfiguration)'
+
+    # 📤 Publish build artifacts (MSBuild ZIP package)
     - task: PublishBuildArtifacts@1
       inputs:
         PathtoPublish: '$(build.artifactStagingDirectory)'
@@ -40,9 +49,12 @@ stages:
 
 - stage: Infrastructure
   displayName: 'Provision Infrastructure with Terraform'
+  dependsOn: Build
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
   jobs:
   - job: Terraform
     steps:
+    # 🌱 Run Terraform init & apply
     - task: AzureCLI@2
       inputs:
         azureSubscription: '$(azureSubscription)'
@@ -57,15 +69,19 @@ stages:
 - stage: Deploy
   displayName: 'Deploy to Azure App Service'
   dependsOn: Infrastructure
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
   jobs:
   - job: Deploy
     steps:
+    # 📥 Download build artifacts
     - task: DownloadBuildArtifacts@0
       inputs:
         buildType: 'current'
         downloadType: 'single'
         artifactName: '$(artifactName)'
         downloadPath: '$(System.ArtifactsDirectory)'
+
+    # 🚀 Deploy to Azure App Service
     - task: AzureRmWebAppDeployment@4
       inputs:
         ConnectionType: 'AzureRM'
