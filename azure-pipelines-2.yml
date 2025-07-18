@@ -1,63 +1,75 @@
-# ASP.NET CI/CD Pipeline
-# Build, test, and deploy MSBuild-generated package to Azure App Service
-
 trigger:
 - master
 
 pool:
-  vmImage: 'windows-latest'
+  vmImage: 'ubuntu-latest'
 
 variables:
   solution: '**/*.sln'
   buildPlatform: 'Any CPU'
   buildConfiguration: 'Release'
-  azureSubscription: 'GameBackendServiceConnection' # 🔑 Service connection name
-  appName: 'GameBackend'                             # 🌐 App Service name
+  azureSubscription: 'GameBackendServiceConnection'
   artifactName: 'drop'
+  terraformWorkingDir: 'terraform'
   packagePath: '$(System.ArtifactsDirectory)/$(artifactName)/**/*.zip'
 
-steps:
-# 🛠️ Install NuGet
-- task: NuGetToolInstaller@1
+stages:
+- stage: Build
+  displayName: 'Build and Test'
+  jobs:
+  - job: Build
+    steps:
+    - task: NuGetToolInstaller@1
+    - task: NuGetCommand@2
+      inputs:
+        restoreSolution: '$(solution)'
+    - task: VSBuild@1
+      inputs:
+        solution: '$(solution)'
+        msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:PackageLocation="$(build.artifactStagingDirectory)"'
+        platform: '$(buildPlatform)'
+        configuration: '$(buildConfiguration)'
+    - task: VSTest@2
+      inputs:
+        platform: '$(buildPlatform)'
+        configuration: '$(buildConfiguration)'
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(build.artifactStagingDirectory)'
+        ArtifactName: '$(artifactName)'
 
-# 📦 Restore NuGet packages
-- task: NuGetCommand@2
-  inputs:
-    restoreSolution: '$(solution)'
+- stage: Infrastructure
+  displayName: 'Provision Infrastructure with Terraform'
+  jobs:
+  - job: Terraform
+    steps:
+    - task: AzureCLI@2
+      inputs:
+        azureSubscription: '$(azureSubscription)'
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          cd $(terraformWorkingDir)
+          az account show
+          terraform init
+          terraform apply -auto-approve
 
-# 🏗️ Build the solution and generate MSBuild ZIP package
-- task: VSBuild@1
-  inputs:
-    solution: '$(solution)'
-    msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:PackageLocation="$(build.artifactStagingDirectory)"'
-    platform: '$(buildPlatform)'
-    configuration: '$(buildConfiguration)'
-
-# ✅ Run unit tests
-- task: VSTest@2
-  inputs:
-    platform: '$(buildPlatform)'
-    configuration: '$(buildConfiguration)'
-
-# 📤 Publish build artifacts (MSBuild ZIP package)
-- task: PublishBuildArtifacts@1
-  inputs:
-    PathtoPublish: '$(build.artifactStagingDirectory)'
-    ArtifactName: '$(artifactName)'
-
-# 📥 Download build artifacts (make ZIP available for deploy)
-- task: DownloadBuildArtifacts@0
-  inputs:
-    buildType: 'current'
-    downloadType: 'single'
-    artifactName: '$(artifactName)'
-    downloadPath: '$(System.ArtifactsDirectory)'
-
-# 🚀 Deploy MSBuild-generated package to Azure App Service
-- task: AzureRmWebAppDeployment@4
-  inputs:
-    ConnectionType: 'AzureRM'
-    azureSubscription: '$(azureSubscription)'
-    appType: 'webApp'
-    WebAppName: '$(appName)'
-    packageForLinux: '$(packagePath)'
+- stage: Deploy
+  displayName: 'Deploy to Azure App Service'
+  dependsOn: Infrastructure
+  jobs:
+  - job: Deploy
+    steps:
+    - task: DownloadBuildArtifacts@0
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: '$(artifactName)'
+        downloadPath: '$(System.ArtifactsDirectory)'
+    - task: AzureRmWebAppDeployment@4
+      inputs:
+        ConnectionType: 'AzureRM'
+        azureSubscription: '$(azureSubscription)'
+        appType: 'webApp'
+        WebAppName: 'game-backend-app' # albo użyj outputu TF
+        packageForLinux: '$(packagePath)'
