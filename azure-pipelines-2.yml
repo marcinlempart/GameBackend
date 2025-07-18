@@ -1,7 +1,5 @@
-# ASP.NET
-# Build and test ASP.NET projects.
-# Add steps that publish symbols, save build artifacts, deploy, and more:
-# https://docs.microsoft.com/azure/devops/pipelines/apps/aspnet/build-aspnet-4
+# ASP.NET CI/CD Pipeline
+# Build, test, and deploy to Azure App Service
 
 trigger:
 - master
@@ -13,14 +11,20 @@ variables:
   solution: '**/*.sln'
   buildPlatform: 'Any CPU'
   buildConfiguration: 'Release'
+  azureSubscription: 'GameBackendServiceConnection' # 🔑 Service connection name
+  appName: 'GameBackend'                  # 🌐 App Service name
+  packagePath: '$(System.DefaultWorkingDirectory)/drop/**/*.zip'
 
 steps:
+# 🛠️ Install NuGet
 - task: NuGetToolInstaller@1
 
+# 📦 Restore NuGet packages
 - task: NuGetCommand@2
   inputs:
     restoreSolution: '$(solution)'
 
+# 🏗️ Build the solution
 - task: VSBuild@1
   inputs:
     solution: '$(solution)'
@@ -28,12 +32,22 @@ steps:
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
 
+# ✅ Run unit tests
 - task: VSTest@2
   inputs:
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
 
+# 📤 Publish build artifacts (ZIP package)
 - task: PublishBuildArtifacts@1
   inputs:
     PathtoPublish: '$(build.artifactStagingDirectory)'
     ArtifactName: 'drop'
+
+# 🚀 Deploy to Azure App Service
+- task: AzureWebApp@1
+  inputs:
+    azureSubscription: '$(azureSubscription)'
+    appType: 'webApp'
+    appName: '$(appName)'
+    package: '$(packagePath)'
