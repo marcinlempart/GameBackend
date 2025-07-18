@@ -12,8 +12,9 @@ variables:
   buildPlatform: 'Any CPU'
   buildConfiguration: 'Release'
   azureSubscription: 'GameBackendServiceConnection' # 🔑 Service connection name
-  appName: 'GameBackend'                  # 🌐 App Service name
-  packagePath: '$(System.DefaultWorkingDirectory)/drop/**/*.zip'
+  appName: 'GameBackend'                             # 🌐 App Service name
+  artifactName: 'drop'
+  packagePath: '$(System.ArtifactsDirectory)/$(artifactName)/**/*.zip'
 
 steps:
 # 🛠️ Install NuGet
@@ -42,7 +43,15 @@ steps:
 - task: PublishBuildArtifacts@1
   inputs:
     PathtoPublish: '$(build.artifactStagingDirectory)'
-    ArtifactName: 'drop'
+    ArtifactName: '$(artifactName)'
+
+# 📥 Download build artifacts (make ZIP available for deploy)
+- task: DownloadBuildArtifacts@0
+  inputs:
+    buildType: 'current'
+    downloadType: 'single'
+    artifactName: '$(artifactName)'
+    downloadPath: '$(System.ArtifactsDirectory)'
 
 # 🚀 Deploy to Azure App Service
 - task: AzureWebApp@1
