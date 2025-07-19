@@ -97,11 +97,11 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "high_get_requests" {
       | where resultCode == "307"
       | where timestamp >= ago(24h)
       | summarize TotalRequestCount = count()
-      | where TotalRequestCount >= 10
     QUERY
     time_aggregation_method = "Total"
-    threshold               = 1
+    threshold               = 10
     operator                = "GreaterThanOrEqual"
+    metric_measure_column   = "TotalRequestCount"
 
     failing_periods {
       minimum_failing_periods_to_trigger_alert = 1
