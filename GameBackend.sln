@@ -3,7 +3,12 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.8.34511.84
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameBackend", "GameBackend\GameBackend.csproj", "{99F8D28C-C31F-4A0A-8DCC-2C6330A35FDE}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "GameBackend", "GameBackend\GameBackend.csproj", "{99F8D28C-C31F-4A0A-8DCC-2C6330A35FDE}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "terraform", "terraform", "{E1F58B99-41EB-41CD-B4CE-1D451AD4EC68}"
+	ProjectSection(SolutionItems) = preProject
+		main.tf = main.tf
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
