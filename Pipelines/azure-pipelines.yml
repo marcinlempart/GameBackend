@@ -53,14 +53,14 @@ stages:
               ArtifactName: $(artifactName)
 
   # ===================================
-  # 2️⃣ PROVISION INFRA Z TERRAFORM (Linux)
+  # 2️⃣ SMART TERRAFORM - BEZ WARNINGÓW
   # ===================================
   - stage: Infrastructure
-    displayName: "Provision Infrastructure with Terraform"
+    displayName: "Smart Infrastructure Management"
     dependsOn: Build
     jobs:
       - job: TerraformApply
-        displayName: "Terraform Apply"
+        displayName: "Terraform Apply with Smart Import"
         pool:
           vmImage: "ubuntu-latest"
         steps:
@@ -74,35 +74,78 @@ stages:
             displayName: "Install Terraform"
 
           - task: AzureCLI@2
-            displayName: "Terraform Init, Import & Apply"
+            displayName: "Smart Terraform - Check State & Apply"
             inputs:
               azureSubscription: $(azureSubscription)
               scriptType: bash
               scriptLocation: inlineScript
               workingDirectory: $(terraformWorkingDir)
               inlineScript: |
-                echo "Initializing Terraform..."
+                echo "🚀 Initializing Terraform..."
                 terraform init
 
-                echo "Importing existing resources if they exist..."
+                echo "🔍 Checking current Terraform state..."
+                terraform state list > current_state.txt 2>/dev/null || echo "No existing state found"
 
-                # Import Resource Group
-                terraform import azurerm_resource_group.rg /subscriptions/171eb711-b76d-49e7-a653-d91675596edb/resourceGroups/rg-game-backend || echo "Resource Group import failed or already exists"
+                echo "📋 Current resources in state:"
+                if [ -s current_state.txt ]; then
+                  cat current_state.txt
+                else
+                  echo "State is empty - will attempt imports"
+                fi
 
-                # Import Service Plan
-                terraform import azurerm_service_plan.app_plan /subscriptions/171eb711-b76d-49e7-a653-d91675596edb/resourceGroups/rg-game-backend/providers/Microsoft.Web/serverFarms/game-backend-app-plan || echo "Service Plan import failed or already exists"
+                # Function to check if resource exists in state
+                resource_exists_in_state() {
+                  local resource_name="$1"
+                  if [ -s current_state.txt ] && grep -q "^${resource_name}$" current_state.txt; then
+                    return 0  # exists
+                  else
+                    return 1  # doesn't exist
+                  fi
+                }
 
-                # Import Windows Web App
-                terraform import azurerm_windows_web_app.app_service /subscriptions/171eb711-b76d-49e7-a653-d91675596edb/resourceGroups/rg-game-backend/providers/Microsoft.Web/sites/game-backend-app || echo "Web App import failed or already exists"
+                echo "🔄 Smart import - only import if not already in state..."
 
-                # Import Application Insights
-                terraform import azurerm_application_insights.app_insights /subscriptions/171eb711-b76d-49e7-a653-d91675596edb/resourceGroups/rg-game-backend/providers/Microsoft.Insights/components/game-backend-app-insights || echo "App Insights import failed or already exists"
+                # Import Resource Group (tylko jeśli nie ma w state)
+                if ! resource_exists_in_state "azurerm_resource_group.rg"; then
+                  echo "⬇️ Importing Resource Group..."
+                  terraform import azurerm_resource_group.rg /subscriptions/171eb711-b76d-49e7-a653-d91675596edb/resourceGroups/rg-game-backend || echo "❌ RG import failed - might not exist in Azure yet"
+                else
+                  echo "✅ Resource Group already in state, skipping import"
+                fi
 
-                echo "Planning Terraform..."
+                # Import Service Plan (tylko jeśli nie ma w state)
+                if ! resource_exists_in_state "azurerm_service_plan.app_plan"; then
+                  echo "⬇️ Importing Service Plan..."
+                  terraform import azurerm_service_plan.app_plan /subscriptions/171eb711-b76d-49e7-a653-d91675596edb/resourceGroups/rg-game-backend/providers/Microsoft.Web/serverFarms/game-backend-app-plan || echo "❌ Service Plan import failed - might not exist in Azure yet"
+                else
+                  echo "✅ Service Plan already in state, skipping import"
+                fi
+
+                # Import Windows Web App (tylko jeśli nie ma w state)
+                if ! resource_exists_in_state "azurerm_windows_web_app.app_service"; then
+                  echo "⬇️ Importing Windows Web App..."
+                  terraform import azurerm_windows_web_app.app_service /subscriptions/171eb711-b76d-49e7-a653-d91675596edb/resourceGroups/rg-game-backend/providers/Microsoft.Web/sites/game-backend-app || echo "❌ Web App import failed - might not exist in Azure yet"
+                else
+                  echo "✅ Web App already in state, skipping import"
+                fi
+
+                # Import Application Insights (tylko jeśli nie ma w state)
+                if ! resource_exists_in_state "azurerm_application_insights.app_insights"; then
+                  echo "⬇️ Importing Application Insights..."
+                  terraform import azurerm_application_insights.app_insights /subscriptions/171eb711-b76d-49e7-a653-d91675596edb/resourceGroups/rg-game-backend/providers/Microsoft.Insights/components/game-backend-app-insights || echo "❌ App Insights import failed - might not exist in Azure yet"
+                else
+                  echo "✅ Application Insights already in state, skipping import"
+                fi
+
+                echo "📊 Planning Terraform changes..."
                 terraform plan -out=tfplan
 
-                echo "Applying Terraform..."
+                echo "🚀 Applying Terraform changes..."
                 terraform apply -auto-approve tfplan
+
+                echo "📝 Final state after apply:"
+                terraform state list
 
   # ===================================
   # 3️⃣ DEPLOY DO AZURE APP SERVICE (Linux)
@@ -161,3 +204,7 @@ stages:
                 echo "✅ Application: Deployed to App Service"
                 echo "✅ Monitoring: Application Insights configured"
                 echo "🌐 Access your app at: https://$APP_URL"
+
+                # Sprawdź Application Insights
+                echo "🔍 Checking Application Insights integration..."
+                az monitor app-insights component show --app game-backend-app-insights --resource-group rg-game-backend --query "name" --output tsv || echo "App Insights check failed"
