@@ -78,41 +78,60 @@ resource "azurerm_monitor_action_group" "app_alerts" {
   }
 }
 
-# Alert - Wysoka liczba GET / requests w ciągu 24h
-resource "azurerm_monitor_scheduled_query_rules_alert_v2" "high_get_requests" {
-  name                = "${var.app_name}-high-get-requests"
+# Prostszy alert - High Response Time (łatwiejszy do skonfigurowania)
+resource "azurerm_monitor_metric_alert" "high_response_time" {
+  name                = "${var.app_name}-high-response-time"
   resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
-
-  evaluation_frequency = "PT5M"  # Sprawdzaj co 5 minut
-  window_duration      = "P1D"   # Okno czasowe 24 godziny (1 dzień)
-  scopes               = [azurerm_application_insights.app_insights.id]
-  severity             = 2
+  scopes              = [azurerm_windows_web_app.app_service.id]
+  description         = "Alert when response time is high"
+  severity            = 2
+  frequency           = "PT5M"
+  window_size         = "PT5M"
 
   criteria {
-    query                   = <<-QUERY
-      requests
-      | where url contains "/"
-      | where name == "GET /"
-      | where resultCode == "307"
-      | where timestamp >= ago(24h)
-      | summarize TotalRequestCount = count()
-    QUERY
-    time_aggregation_method = "Total"
-    threshold               = 10
-    operator                = "GreaterThanOrEqual"
-    metric_measure_column   = "TotalRequestCount"
+    metric_namespace = "Microsoft.Web/sites"
+    metric_name      = "HttpResponseTime"
+    aggregation      = "Average"
+    operator         = "GreaterThan"
+    threshold        = 5000  # 5 sekund
 
-    failing_periods {
-      minimum_failing_periods_to_trigger_alert = 1
-      number_of_evaluation_periods             = 1
+    dimension {
+      name     = "Instance"
+      operator = "Include"
+      values   = ["*"]
     }
   }
 
   action {
-    action_groups = [azurerm_monitor_action_group.app_alerts.id]
+    action_group_id = azurerm_monitor_action_group.app_alerts.id
+  }
+}
+
+# Dodatkowy alert - Request Count (łatwiejszy niż KQL query)
+resource "azurerm_monitor_metric_alert" "high_request_count" {
+  name                = "${var.app_name}-high-request-count"
+  resource_group_name = azurerm_resource_group.rg.name
+  scopes              = [azurerm_windows_web_app.app_service.id]
+  description         = "Alert when request count is high"
+  severity            = 2
+  frequency           = "PT5M"
+  window_size         = "PT15M"  # 15 minut
+
+  criteria {
+    metric_namespace = "Microsoft.Web/sites"
+    metric_name      = "Requests"
+    aggregation      = "Total"
+    operator         = "GreaterThan"
+    threshold        = 10  # 10 requestów w 15 minut
+
+    dimension {
+      name     = "Instance"
+      operator = "Include"
+      values   = ["*"]
+    }
   }
 
-  description = "Alert gdy aplikacja otrzyma 10 lub więcej GET / requests (kod 307) w ciągu ostatnich 24 godzin - sprawdzane co 5 minut"
-  enabled     = true
+  action {
+    action_group_id = azurerm_monitor_action_group.app_alerts.id
+  }
 }
