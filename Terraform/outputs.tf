@@ -25,9 +25,14 @@ output "alert_action_group_id" {
   description = "ID of the action group for alerts"
 }
 
-output "get_requests_alert_id" {
-  value       = azurerm_monitor_scheduled_query_rules_alert_v2.high_get_requests.id
-  description = "ID of the GET requests alert rule"
+output "high_response_time_alert_id" {
+  value       = azurerm_monitor_metric_alert.high_response_time.id
+  description = "ID of the high response time alert rule"
+}
+
+output "high_request_count_alert_id" {
+  value       = azurerm_monitor_metric_alert.high_request_count.id
+  description = "ID of the high request count alert rule"
 }
 
 output "alert_email" {

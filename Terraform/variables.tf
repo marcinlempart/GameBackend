@@ -19,7 +19,7 @@ variable "app_name" {
 variable "alert_email" {
   description = "Email address for receiving alerts"
   type        = string
-  default     = "your-email@example.com"  # Zmień na swój email
+  default     = "marcin.lempart@gmail.com"  # Zmień na swój email
 }
 
 # Optional: Add subscription_id variable if you need to explicitly set it
