@@ -12,6 +12,7 @@ variables:
   artifactName: 'drop'
   terraformWorkingDir: 'Terraform' # 📁 Folder w repo z dużej litery
   packagePath: '$(System.ArtifactsDirectory)/$(artifactName)/**/*.zip'
+  appServiceName: 'game-backend-app' # 👈 Nazwa App Service z Terraform
 
 stages:
 # 🏗️ Build and Test Stage
@@ -61,7 +62,7 @@ stages:
         choco install terraform -y
       displayName: 'Install Terraform CLI'
 
-    # 🌱 Run Terraform init & apply and export app_service_name
+    # 🌱 Run Terraform init & apply
     - task: AzureCLI@2
       inputs:
         azureSubscription: '$(azureSubscription)'
@@ -71,12 +72,7 @@ stages:
           cd $(terraformWorkingDir)
           terraform init
           terraform apply -auto-approve
-          terraform output -raw app_service_name > ../app_service_name.txt
       displayName: 'Terraform Init & Apply'
-
-    # 📤 Publish App Service name for Deploy Stage
-    - publish: app_service_name.txt
-      artifact: appServiceName
 
 # 🚀 Deploy Stage
 - stage: Deploy
@@ -94,30 +90,12 @@ stages:
         artifactName: '$(artifactName)'
         downloadPath: '$(System.ArtifactsDirectory)'
 
-    # 📥 Download App Service name artifact
-    - task: DownloadBuildArtifacts@0
-      inputs:
-        artifactName: 'appServiceName'
-        downloadPath: '$(System.DefaultWorkingDirectory)'
-        patterns: '**/app_service_name.txt'
-
-    # 💾 Set App Service name variable
-    - powershell: |
-        if (Test-Path "$(System.DefaultWorkingDirectory)/app_service_name.txt") {
-            $appName = Get-Content "$(System.DefaultWorkingDirectory)/app_service_name.txt"
-            Write-Host "##vso[task.setvariable variable=appServiceName]$appName"
-        } else {
-            Write-Error "app_service_name.txt not found!"
-            exit 1
-        }
-      displayName: 'Set App Service Name variable'
-
     # 🚀 Deploy to Azure App Service
     - task: AzureRmWebAppDeployment@4
       inputs:
         ConnectionType: 'AzureRM'
         azureSubscription: '$(azureSubscription)'
         appType: 'webApp'
-        WebAppName: '$(appServiceName)' # Dynamic from Terraform
+        WebAppName: '$(appServiceName)' # 👈 Na sztywno zdefiniowana nazwa
         packageForLinux: '$(packagePath)'
       displayName: 'Deploy to Azure App Service'
