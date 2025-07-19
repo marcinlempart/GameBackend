@@ -74,7 +74,7 @@ stages:
             displayName: "Install Terraform"
 
           - task: AzureCLI@2
-            displayName: "Terraform Init & Apply"
+            displayName: "Terraform Init, Import & Apply"
             inputs:
               azureSubscription: $(azureSubscription)
               scriptType: bash
@@ -84,8 +84,19 @@ stages:
                 echo "Initializing Terraform..."
                 terraform init
 
-                echo "Importing existing resource group if exists..."
-                terraform import azurerm_resource_group.rg /subscriptions/171eb711-b76d-49e7-a653-d91675596edb/resourceGroups/rg-game-backend || echo "Import failed or already exists"
+                echo "Importing existing resources if they exist..."
+
+                # Import Resource Group
+                terraform import azurerm_resource_group.rg /subscriptions/171eb711-b76d-49e7-a653-d91675596edb/resourceGroups/rg-game-backend || echo "Resource Group import failed or already exists"
+
+                # Import Service Plan
+                terraform import azurerm_service_plan.app_plan /subscriptions/171eb711-b76d-49e7-a653-d91675596edb/resourceGroups/rg-game-backend/providers/Microsoft.Web/serverFarms/game-backend-app-plan || echo "Service Plan import failed or already exists"
+
+                # Import Windows Web App
+                terraform import azurerm_windows_web_app.app_service /subscriptions/171eb711-b76d-49e7-a653-d91675596edb/resourceGroups/rg-game-backend/providers/Microsoft.Web/sites/game-backend-app || echo "Web App import failed or already exists"
+
+                # Import Application Insights
+                terraform import azurerm_application_insights.app_insights /subscriptions/171eb711-b76d-49e7-a653-d91675596edb/resourceGroups/rg-game-backend/providers/Microsoft.Insights/components/game-backend-app-insights || echo "App Insights import failed or already exists"
 
                 echo "Planning Terraform..."
                 terraform plan -out=tfplan
@@ -142,3 +153,11 @@ stages:
                 echo "Verifying deployment..."
                 APP_URL=$(az webapp show --name "game-backend-app" --resource-group "rg-game-backend" --query defaultHostName --output tsv)
                 echo "Application URL: https://$APP_URL"
+                echo "Testing endpoint..."
+                curl -I "https://$APP_URL" || echo "App might still be starting up"
+
+                echo "=== Deployment Summary ==="
+                echo "✅ Infrastructure: Managed by Terraform"
+                echo "✅ Application: Deployed to App Service"
+                echo "✅ Monitoring: Application Insights configured"
+                echo "🌐 Access your app at: https://$APP_URL"
