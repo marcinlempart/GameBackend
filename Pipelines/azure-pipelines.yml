@@ -1,7 +1,9 @@
 trigger:
   - master
+
 pool:
   vmImage: windows-latest
+
 variables:
   solution: "**/*.sln"
   buildPlatform: Any CPU
@@ -11,6 +13,7 @@ variables:
   terraformWorkingDir: Terraform
   packagePath: $(System.ArtifactsDirectory)/$(artifactName)/**/*.zip
   appServiceName: game-backend-app
+
 stages:
   - stage: Build
     displayName: Build and Test
@@ -18,25 +21,33 @@ stages:
       - job: Build
         steps:
           - task: NuGetToolInstaller@1
+
           - task: NuGetCommand@2
             inputs:
               restoreSolution: $(solution)
+
           - task: VSBuild@1
             inputs:
               solution: $(solution)
-              msbuildArgs:
-                /p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true
-                /p:SkipInvalidConfigurations=true /p:PackageLocation="$(build.artifactStagingDirectory)"
+              msbuildArgs: >
+                /p:DeployOnBuild=true
+                /p:WebPublishMethod=Package
+                /p:PackageAsSingleFile=true
+                /p:SkipInvalidConfigurations=true
+                /p:PackageLocation="$(build.artifactStagingDirectory)"
               platform: $(buildPlatform)
               configuration: $(buildConfiguration)
+
           - task: VSTest@2
             inputs:
               platform: $(buildPlatform)
               configuration: $(buildConfiguration)
+
           - task: PublishBuildArtifacts@1
             inputs:
               PathtoPublish: $(build.artifactStagingDirectory)
               ArtifactName: $(artifactName)
+
   - stage: Infrastructure
     displayName: Provision Infrastructure with Terraform
     dependsOn: Build
@@ -44,90 +55,85 @@ stages:
     jobs:
       - job: Terraform
         steps:
-          - task: UseTerraform@0
-            inputs:
-              terraformVersion: latest
-            displayName: Install Terraform
+          # Optional: install Terraform if missing
+          - powershell: |
+              Write-Host "Checking Terraform version..."
+              terraform -version
+            displayName: Check Terraform Version
+            continueOnError: true
+
+          - powershell: |
+              if (-not (Get-Command terraform -ErrorAction SilentlyContinue)) {
+                  Write-Host "Terraform not found. Installing..."
+                  choco install terraform -y --version=1.7.5
+              } else {
+                  Write-Host "Terraform is already installed."
+              }
+              terraform -version
+            displayName: Ensure Terraform Installed
+
+          # Azure CLI login
           - task: AzureCLI@2
             inputs:
               azureSubscription: $(azureSubscription)
               scriptType: pscore
               scriptLocation: inlineScript
-              inlineScript:
-                '# Verify Azure CLI is logged in and show account info
-
+              inlineScript: |
                 az account show
-
-
-                # Get subscription ID and set as environment variable
-
                 $subscriptionId = az account show --query id --output tsv
-
                 echo "##vso[task.setvariable variable=ARM_SUBSCRIPTION_ID]$subscriptionId"
-
-
                 Write-Host "Azure CLI authenticated successfully"
-
                 Write-Host "Subscription ID: $subscriptionId"
-
-                '
             displayName: Azure Authentication Setup
+
+          # Terraform Init
           - task: AzureCLI@2
             inputs:
               azureSubscription: $(azureSubscription)
               scriptType: pscore
               scriptLocation: inlineScript
               workingDirectory: $(terraformWorkingDir)
-              inlineScript: 'Write-Host "Initializing Terraform..."
-
+              inlineScript: |
+                Write-Host "Initializing Terraform..."
                 terraform init
-
-                '
             displayName: Terraform Init
+
+          # Terraform Plan
           - task: AzureCLI@2
             inputs:
               azureSubscription: $(azureSubscription)
               scriptType: pscore
               scriptLocation: inlineScript
               workingDirectory: $(terraformWorkingDir)
-              inlineScript: 'Write-Host "Creating Terraform execution plan..."
-
+              inlineScript: |
+                Write-Host "Creating Terraform plan..."
                 terraform plan -out=tfplan
-
-                '
             displayName: Terraform Plan
+
+          # Terraform Apply
           - task: AzureCLI@2
             inputs:
               azureSubscription: $(azureSubscription)
               scriptType: pscore
               scriptLocation: inlineScript
               workingDirectory: $(terraformWorkingDir)
-              inlineScript: 'Write-Host "Applying Terraform configuration..."
-
+              inlineScript: |
+                Write-Host "Applying Terraform configuration..."
                 terraform apply -auto-approve tfplan
 
-
-                # Get outputs for use in deployment stage
-
+                # Capture outputs for next stage
                 $appServiceName = terraform output -raw app_service_name
-
                 $resourceGroupName = terraform output -raw resource_group_name
 
-
                 Write-Host "##vso[task.setvariable variable=TERRAFORM_APP_SERVICE_NAME;isOutput=true]$appServiceName"
-
                 Write-Host "##vso[task.setvariable variable=TERRAFORM_RESOURCE_GROUP_NAME;isOutput=true]$resourceGroupName"
 
-
                 Write-Host "Infrastructure provisioned successfully"
-
                 Write-Host "App Service Name: $appServiceName"
-
                 Write-Host "Resource Group: $resourceGroupName"
-
-                '
             name: terraformOutput
             displayName: Terraform Apply
+
   - stage: Deploy
     displayName: Deploy to Azure App Service
     dependsOn: Infrastructure
@@ -135,12 +141,8 @@ stages:
     jobs:
       - job: Deploy
         variables:
-          appServiceName:
-            $[ stageDependencies.Infrastructure.Terraform.outputs['terraformOutput.TERRAFORM_APP_SERVICE_NAME']
-            ]
-          resourceGroupName:
-            $[ stageDependencies.Infrastructure.Terraform.outputs['terraformOutput.TERRAFORM_RESOURCE_GROUP_NAME']
-            ]
+          appServiceName: $[ stageDependencies.Infrastructure.Terraform.outputs['terraformOutput.TERRAFORM_APP_SERVICE_NAME'] ]
+          resourceGroupName: $[ stageDependencies.Infrastructure.Terraform.outputs['terraformOutput.TERRAFORM_RESOURCE_GROUP_NAME'] ]
         steps:
           - task: DownloadBuildArtifacts@0
             inputs:
@@ -148,6 +150,7 @@ stages:
               downloadType: single
               artifactName: $(artifactName)
               downloadPath: $(System.ArtifactsDirectory)
+
           - task: AzureRmWebAppDeployment@4
             inputs:
               ConnectionType: AzureRM
@@ -158,18 +161,22 @@ stages:
               packageForLinux: $(packagePath)
               deployToSlotOrASE: false
             displayName: Deploy to Azure App Service
+
           - task: AzureCLI@2
             inputs:
               azureSubscription: $(azureSubscription)
               scriptType: pscore
               scriptLocation: inlineScript
-              inlineScript:
-                "Write-Host \"Verifying deployment...\"\n$appUrl = az webapp\
-                \ show --name $(appServiceName) --resource-group $(resourceGroupName) --query\
-                \ defaultHostName --output tsv\nWrite-Host \"Application URL: https://$appUrl\"\
-                \n\n# Optional: Test if the application is responding\ntry {\n  $response\
-                \ = Invoke-WebRequest -Uri \"https://$appUrl\" -TimeoutSec 30\n  Write-Host\
-                \ \"Application is responding with status: $($response.StatusCode)\"\n}\
-                \ catch {\n  Write-Warning \"Could not verify application response: $($_.Exception.Message)\"\
-                \n}\n"
+              inlineScript: |
+                Write-Host "Verifying deployment..."
+                $appUrl = az webapp show --name $(appServiceName) --resource-group $(resourceGroupName) --query defaultHostName --output tsv
+                Write-Host "Application URL: https://$appUrl"
+
+                # Optional: Test application response
+                try {
+                  $response = Invoke-WebRequest -Uri "https://$appUrl" -TimeoutSec 30
+                  Write-Host "Application is responding with status: $($response.StatusCode)"
+                } catch {
+                  Write-Warning "Could not verify application response: $($_.Exception.Message)"
+                }
             displayName: Verify Deployment
