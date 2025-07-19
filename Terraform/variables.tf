@@ -16,6 +16,12 @@ variable "app_name" {
   default     = "game-backend-app"
 }
 
+variable "alert_email" {
+  description = "Email address for receiving alerts"
+  type        = string
+  default     = "your-email@example.com"  # Zmień na swój email
+}
+
 # Optional: Add subscription_id variable if you need to explicitly set it
 # variable "subscription_id" {
 #   description = "Azure subscription ID"
