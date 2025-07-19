@@ -10,7 +10,7 @@ variables:
   azureSubscription: "GameBackendServiceConnection"
   artifactName: "drop"
   terraformWorkingDir: "Terraform"
-  packagePath: "$(System.ArtifactsDirectory)/$(artifactName)/**/*.zip"
+  packagePath: "$(System.ArtifactsDirectory)/$(artifactName)/publish"
 
 stages:
   # ===================================
@@ -35,10 +35,10 @@ stages:
               solution: $(solution)
               msbuildArgs: >
                 /p:DeployOnBuild=true
-                /p:WebPublishMethod=Package
-                /p:PackageAsSingleFile=true
-                /p:SkipInvalidConfigurations=true
-                /p:PackageLocation="$(build.artifactStagingDirectory)"
+                /p:PublishProfile=FolderProfile
+                /p:WebPublishMethod=FileSystem
+                /p:PublishUrl="$(build.artifactStagingDirectory)/publish"
+                /p:DeployDefaultTarget=WebPublish
               platform: $(buildPlatform)
               configuration: $(buildConfiguration)
 
@@ -111,6 +111,18 @@ stages:
               downloadType: single
               artifactName: $(artifactName)
               downloadPath: $(System.ArtifactsDirectory)
+
+          - script: |
+              echo "=== DEBUG: Checking artifacts ==="
+              echo "ArtifactsDirectory: $(System.ArtifactsDirectory)"
+              echo "PackagePath: $(packagePath)"
+              echo "Listing all files:"
+              find $(System.ArtifactsDirectory) -type f -name "*" | head -20
+              echo "Looking for publish folder:"
+              find $(System.ArtifactsDirectory) -name "publish" -type d
+              echo "Contents of publish folder:"
+              find $(System.ArtifactsDirectory) -name "publish" -type d -exec ls -la {} \;
+            displayName: "Debug: List artifacts"
 
           - task: AzureRmWebAppDeployment@4
             displayName: "Deploy App to Azure App Service"
