@@ -61,6 +61,7 @@ stages:
     jobs:
       - job: TerraformApply
         displayName: "Terraform Apply"
+        name: TerraformApply # ✅ Added job name for stageDependencies outputs
         pool:
           vmImage: "ubuntu-latest"
         steps:
@@ -114,8 +115,8 @@ stages:
         pool:
           vmImage: "ubuntu-latest"
         variables:
-          appServiceName: $[ stageDependencies.Infrastructure.TerraformApply.outputs['AppServiceName'] ]
-          resourceGroupName: $[ stageDependencies.Infrastructure.TerraformApply.outputs['ResourceGroupName'] ]
+          appServiceName: $[ stageDependencies.Infrastructure.TerraformApply.outputs['TerraformApply.AppServiceName'] ]
+          resourceGroupName: $[ stageDependencies.Infrastructure.TerraformApply.outputs['TerraformApply.ResourceGroupName'] ]
         steps:
           - task: DownloadBuildArtifacts@0
             inputs:
