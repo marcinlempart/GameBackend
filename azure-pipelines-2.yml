@@ -61,7 +61,7 @@ stages:
         choco install terraform -y
       displayName: 'Install Terraform CLI'
 
-    # 🌱 Run Terraform init & apply
+    # 🌱 Run Terraform init & apply and export app_service_name
     - task: AzureCLI@2
       inputs:
         azureSubscription: '$(azureSubscription)'
@@ -99,11 +99,17 @@ stages:
       inputs:
         artifactName: 'appServiceName'
         downloadPath: '$(System.DefaultWorkingDirectory)'
+        patterns: '**/app_service_name.txt'
 
     # 💾 Set App Service name variable
     - powershell: |
-        $appName = Get-Content "$(System.DefaultWorkingDirectory)/app_service_name.txt"
-        Write-Host "##vso[task.setvariable variable=appServiceName]$appName"
+        if (Test-Path "$(System.DefaultWorkingDirectory)/app_service_name.txt") {
+            $appName = Get-Content "$(System.DefaultWorkingDirectory)/app_service_name.txt"
+            Write-Host "##vso[task.setvariable variable=appServiceName]$appName"
+        } else {
+            Write-Error "app_service_name.txt not found!"
+            exit 1
+        }
       displayName: 'Set App Service Name variable'
 
     # 🚀 Deploy to Azure App Service
