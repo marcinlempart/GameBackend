@@ -4,7 +4,7 @@ trigger:
       - main
 
 pool:
-  vmImage: "windows-latest" # potrzebne dla MSBuild
+  vmImage: "windows-latest" # Potrzebny do MSBuild i .NET Framework
 
 variables:
   solution: "**/*.sln"
@@ -63,11 +63,13 @@ stages:
       - job: TerraformApply
         displayName: "Terraform Apply"
         steps:
-          - task: TerraformInstaller@1
-            displayName: "Install Terraform"
-            inputs:
-              terraformVersion: "latest"
+          # ✅ Sprawdź wersję Terraform z agenta (jest preinstalowany)
+          - powershell: |
+              Write-Host "Checking Terraform version..."
+              terraform -version
+            displayName: "Check Terraform Version"
 
+          # ✅ Terraform Init, Plan, Apply
           - task: AzureCLI@2
             displayName: "Terraform Init & Apply"
             inputs:
@@ -132,3 +134,11 @@ stages:
                 Write-Host "Verifying deployment..."
                 $appUrl = az webapp show --name $(appServiceName) --resource-group $(resourceGroupName) --query defaultHostName --output tsv
                 Write-Host "Application URL: https://$appUrl"
+
+                # Opcjonalnie: testuj aplikację
+                try {
+                  $response = Invoke-WebRequest -Uri "https://$appUrl" -TimeoutSec 30
+                  Write-Host "Application is responding with status: $($response.StatusCode)"
+                } catch {
+                  Write-Warning "Could not verify application response: $($_.Exception.Message)"
+                }
