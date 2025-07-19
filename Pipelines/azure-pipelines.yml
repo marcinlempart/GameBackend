@@ -11,6 +11,8 @@ variables:
   artifactName: "drop"
   terraformWorkingDir: "Terraform"
   packagePath: "$(System.ArtifactsDirectory)/$(artifactName)/**/*.zip"
+  appServiceName: "game-backend-app"
+  resourceGroupName: "game-backend-rg"
 
 stages:
   # ===================================
@@ -61,7 +63,6 @@ stages:
     jobs:
       - job: TerraformApply
         displayName: "Terraform Apply"
-        name: TerraformApply # ✅ Added job name for stageDependencies outputs
         pool:
           vmImage: "ubuntu-latest"
         steps:
@@ -93,16 +94,6 @@ stages:
                 echo "Applying Terraform..."
                 terraform apply -auto-approve tfplan
 
-                echo "Fetching Terraform outputs..."
-                APP_SERVICE_NAME=$(terraform output -raw app_service_name)
-                RESOURCE_GROUP_NAME=$(terraform output -raw resource_group_name)
-
-                echo "##vso[task.setvariable variable=AppServiceName;isOutput=true]$APP_SERVICE_NAME"
-                echo "##vso[task.setvariable variable=ResourceGroupName;isOutput=true]$RESOURCE_GROUP_NAME"
-
-                echo "App Service Name: $APP_SERVICE_NAME"
-                echo "Resource Group: $RESOURCE_GROUP_NAME"
-
   # ===================================
   # 3️⃣ DEPLOY DO AZURE APP SERVICE (Linux)
   # ===================================
@@ -114,9 +105,6 @@ stages:
         displayName: "Deploy Web App"
         pool:
           vmImage: "ubuntu-latest"
-        variables:
-          appServiceName: $[ stageDependencies.Infrastructure.TerraformApply.outputs['TerraformApply.AppServiceName'] ]
-          resourceGroupName: $[ stageDependencies.Infrastructure.TerraformApply.outputs['TerraformApply.ResourceGroupName'] ]
         steps:
           - task: DownloadBuildArtifacts@0
             inputs:
