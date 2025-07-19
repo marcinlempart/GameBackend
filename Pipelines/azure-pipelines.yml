@@ -3,9 +3,6 @@ trigger:
     include:
       - main
 
-pool:
-  vmImage: "windows-latest" # Potrzebny do MSBuild i .NET Framework
-
 variables:
   solution: "**/*.sln"
   buildPlatform: "Any CPU"
@@ -17,13 +14,15 @@ variables:
 
 stages:
   # ===================================
-  # 1️⃣ BUILD & TEST .NET APLIKACJI
+  # 1️⃣ BUILD & TEST .NET APLIKACJI (Windows)
   # ===================================
   - stage: Build
     displayName: "Build and Test Application"
     jobs:
       - job: BuildApp
         displayName: "Build .NET App"
+        pool:
+          vmImage: "windows-latest"
         steps:
           - task: NuGetToolInstaller@1
 
@@ -54,7 +53,7 @@ stages:
               ArtifactName: $(artifactName)
 
   # ===================================
-  # 2️⃣ PROVISION INFRA Z TERRAFORM
+  # 2️⃣ PROVISION INFRA Z TERRAFORM (Linux)
   # ===================================
   - stage: Infrastructure
     displayName: "Provision Infrastructure with Terraform"
@@ -62,43 +61,41 @@ stages:
     jobs:
       - job: TerraformApply
         displayName: "Terraform Apply"
+        pool:
+          vmImage: "ubuntu-latest" # 🚀 Linux agent z preinstalowanym Terraform
         steps:
-          # ✅ Sprawdź wersję Terraform z agenta (jest preinstalowany)
-          - powershell: |
-              Write-Host "Checking Terraform version..."
-              terraform -version
+          - script: terraform -version
             displayName: "Check Terraform Version"
 
-          # ✅ Terraform Init, Plan, Apply
           - task: AzureCLI@2
             displayName: "Terraform Init & Apply"
             inputs:
               azureSubscription: $(azureSubscription)
-              scriptType: pscore
+              scriptType: bash
               scriptLocation: inlineScript
               workingDirectory: $(terraformWorkingDir)
               inlineScript: |
-                Write-Host "Initializing Terraform..."
+                echo "Initializing Terraform..."
                 terraform init
 
-                Write-Host "Planning Terraform..."
+                echo "Planning Terraform..."
                 terraform plan -out=tfplan
 
-                Write-Host "Applying Terraform..."
+                echo "Applying Terraform..."
                 terraform apply -auto-approve tfplan
 
-                Write-Host "Fetching Terraform outputs..."
-                $appServiceName = terraform output -raw app_service_name
-                $resourceGroupName = terraform output -raw resource_group_name
+                echo "Fetching Terraform outputs..."
+                APP_SERVICE_NAME=$(terraform output -raw app_service_name)
+                RESOURCE_GROUP_NAME=$(terraform output -raw resource_group_name)
 
-                Write-Host "##vso[task.setvariable variable=AppServiceName;isOutput=true]$appServiceName"
-                Write-Host "##vso[task.setvariable variable=ResourceGroupName;isOutput=true]$resourceGroupName"
+                echo "##vso[task.setvariable variable=AppServiceName;isOutput=true]$APP_SERVICE_NAME"
+                echo "##vso[task.setvariable variable=ResourceGroupName;isOutput=true]$RESOURCE_GROUP_NAME"
 
-                Write-Host "App Service Name: $appServiceName"
-                Write-Host "Resource Group: $resourceGroupName"
+                echo "App Service Name: $APP_SERVICE_NAME"
+                echo "Resource Group: $RESOURCE_GROUP_NAME"
 
   # ===================================
-  # 3️⃣ DEPLOY DO AZURE APP SERVICE
+  # 3️⃣ DEPLOY DO AZURE APP SERVICE (Linux)
   # ===================================
   - stage: Deploy
     displayName: "Deploy Application to Azure App Service"
@@ -106,6 +103,8 @@ stages:
     jobs:
       - job: DeployWebApp
         displayName: "Deploy Web App"
+        pool:
+          vmImage: "ubuntu-latest" # 🚀 Linux agent
         variables:
           appServiceName: $[ stageDependencies.Infrastructure.TerraformApply.outputs['AppServiceName'] ]
           resourceGroupName: $[ stageDependencies.Infrastructure.TerraformApply.outputs['ResourceGroupName'] ]
@@ -128,17 +127,9 @@ stages:
             displayName: "Verify Deployment"
             inputs:
               azureSubscription: $(azureSubscription)
-              scriptType: pscore
+              scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
-                Write-Host "Verifying deployment..."
-                $appUrl = az webapp show --name $(appServiceName) --resource-group $(resourceGroupName) --query defaultHostName --output tsv
-                Write-Host "Application URL: https://$appUrl"
-
-                # Opcjonalnie: testuj aplikację
-                try {
-                  $response = Invoke-WebRequest -Uri "https://$appUrl" -TimeoutSec 30
-                  Write-Host "Application is responding with status: $($response.StatusCode)"
-                } catch {
-                  Write-Warning "Could not verify application response: $($_.Exception.Message)"
-                }
+                echo "Verifying deployment..."
+                APP_URL=$(az webapp show --name $(appServiceName) --resource-group $(resourceGroupName) --query defaultHostName --output tsv)
+                echo "Application URL: https://$APP_URL"
