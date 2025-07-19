@@ -1,181 +1,175 @@
 trigger:
   - master
-
 pool:
-  vmImage: "windows-latest"
-
+  vmImage: windows-latest
 variables:
   solution: "**/*.sln"
-  buildPlatform: "Any CPU"
-  buildConfiguration: "Release"
-  azureSubscription: "GameBackendServiceConnection"
-  artifactName: "drop"
-  terraformWorkingDir: "Terraform"
-  packagePath: "$(System.ArtifactsDirectory)/$(artifactName)/**/*.zip"
-  appServiceName: "game-backend-app"
-
+  buildPlatform: Any CPU
+  buildConfiguration: Release
+  azureSubscription: GameBackendServiceConnection
+  artifactName: drop
+  terraformWorkingDir: Terraform
+  packagePath: $(System.ArtifactsDirectory)/$(artifactName)/**/*.zip
+  appServiceName: game-backend-app
 stages:
-  # 🏗️ Build and Test Stage
   - stage: Build
-    displayName: "Build and Test"
+    displayName: Build and Test
     jobs:
       - job: Build
         steps:
-          # 🛠️ Install NuGet
           - task: NuGetToolInstaller@1
-
-          # 📦 Restore NuGet packages
           - task: NuGetCommand@2
             inputs:
-              restoreSolution: "$(solution)"
-
-          # 🏗️ Build the solution and generate MSBuild ZIP package
+              restoreSolution: $(solution)
           - task: VSBuild@1
             inputs:
-              solution: "$(solution)"
-              msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:PackageLocation="$(build.artifactStagingDirectory)"'
-              platform: "$(buildPlatform)"
-              configuration: "$(buildConfiguration)"
-
-          # ✅ Run unit tests
+              solution: $(solution)
+              msbuildArgs:
+                /p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true
+                /p:SkipInvalidConfigurations=true /p:PackageLocation="$(build.artifactStagingDirectory)"
+              platform: $(buildPlatform)
+              configuration: $(buildConfiguration)
           - task: VSTest@2
             inputs:
-              platform: "$(buildPlatform)"
-              configuration: "$(buildConfiguration)"
-
-          # 📤 Publish build artifacts (MSBuild ZIP package)
+              platform: $(buildPlatform)
+              configuration: $(buildConfiguration)
           - task: PublishBuildArtifacts@1
             inputs:
-              PathtoPublish: "$(build.artifactStagingDirectory)"
-              ArtifactName: "$(artifactName)"
-
-  # 🌱 Provision Infrastructure with Terraform
+              PathtoPublish: $(build.artifactStagingDirectory)
+              ArtifactName: $(artifactName)
   - stage: Infrastructure
-    displayName: "Provision Infrastructure with Terraform"
+    displayName: Provision Infrastructure with Terraform
     dependsOn: Build
     condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
     jobs:
       - job: Terraform
         steps:
-          # 🛠️ Install Terraform using the official task
-          - task: TerraformInstaller@0
+          - task: UseTerraform@0
             inputs:
-              terraformVersion: "latest"
-            displayName: "Install Terraform"
-
-          # 🔐 Azure CLI Login and Set Context
+              terraformVersion: latest
+            displayName: Install Terraform
           - task: AzureCLI@2
             inputs:
-              azureSubscription: "$(azureSubscription)"
-              scriptType: "pscore"
-              scriptLocation: "inlineScript"
-              inlineScript: |
-                # Verify Azure CLI is logged in and show account info
+              azureSubscription: $(azureSubscription)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript:
+                '# Verify Azure CLI is logged in and show account info
+
                 az account show
 
+
                 # Get subscription ID and set as environment variable
+
                 $subscriptionId = az account show --query id --output tsv
+
                 echo "##vso[task.setvariable variable=ARM_SUBSCRIPTION_ID]$subscriptionId"
 
+
                 Write-Host "Azure CLI authenticated successfully"
+
                 Write-Host "Subscription ID: $subscriptionId"
-            displayName: "Azure Authentication Setup"
 
-          # 🌱 Terraform Init
+                '
+            displayName: Azure Authentication Setup
           - task: AzureCLI@2
             inputs:
-              azureSubscription: "$(azureSubscription)"
-              scriptType: "pscore"
-              scriptLocation: "inlineScript"
-              workingDirectory: "$(terraformWorkingDir)"
-              inlineScript: |
-                Write-Host "Initializing Terraform..."
+              azureSubscription: $(azureSubscription)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              workingDirectory: $(terraformWorkingDir)
+              inlineScript: 'Write-Host "Initializing Terraform..."
+
                 terraform init
-            displayName: "Terraform Init"
 
-          # 📋 Terraform Plan
+                '
+            displayName: Terraform Init
           - task: AzureCLI@2
             inputs:
-              azureSubscription: "$(azureSubscription)"
-              scriptType: "pscore"
-              scriptLocation: "inlineScript"
-              workingDirectory: "$(terraformWorkingDir)"
-              inlineScript: |
-                Write-Host "Creating Terraform execution plan..."
+              azureSubscription: $(azureSubscription)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              workingDirectory: $(terraformWorkingDir)
+              inlineScript: 'Write-Host "Creating Terraform execution plan..."
+
                 terraform plan -out=tfplan
-            displayName: "Terraform Plan"
 
-          # 🚀 Terraform Apply
+                '
+            displayName: Terraform Plan
           - task: AzureCLI@2
             inputs:
-              azureSubscription: "$(azureSubscription)"
-              scriptType: "pscore"
-              scriptLocation: "inlineScript"
-              workingDirectory: "$(terraformWorkingDir)"
-              inlineScript: |
-                Write-Host "Applying Terraform configuration..."
+              azureSubscription: $(azureSubscription)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              workingDirectory: $(terraformWorkingDir)
+              inlineScript: 'Write-Host "Applying Terraform configuration..."
+
                 terraform apply -auto-approve tfplan
 
+
                 # Get outputs for use in deployment stage
+
                 $appServiceName = terraform output -raw app_service_name
+
                 $resourceGroupName = terraform output -raw resource_group_name
 
+
                 Write-Host "##vso[task.setvariable variable=TERRAFORM_APP_SERVICE_NAME;isOutput=true]$appServiceName"
+
                 Write-Host "##vso[task.setvariable variable=TERRAFORM_RESOURCE_GROUP_NAME;isOutput=true]$resourceGroupName"
 
-                Write-Host "Infrastructure provisioned successfully"
-                Write-Host "App Service Name: $appServiceName"
-                Write-Host "Resource Group: $resourceGroupName"
-            name: "terraformOutput"
-            displayName: "Terraform Apply"
 
-  # 🚀 Deploy Stage
+                Write-Host "Infrastructure provisioned successfully"
+
+                Write-Host "App Service Name: $appServiceName"
+
+                Write-Host "Resource Group: $resourceGroupName"
+
+                '
+            name: terraformOutput
+            displayName: Terraform Apply
   - stage: Deploy
-    displayName: "Deploy to Azure App Service"
+    displayName: Deploy to Azure App Service
     dependsOn: Infrastructure
     condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
     jobs:
       - job: Deploy
         variables:
-          appServiceName: $[ stageDependencies.Infrastructure.Terraform.outputs['terraformOutput.TERRAFORM_APP_SERVICE_NAME'] ]
-          resourceGroupName: $[ stageDependencies.Infrastructure.Terraform.outputs['terraformOutput.TERRAFORM_RESOURCE_GROUP_NAME'] ]
+          appServiceName:
+            $[ stageDependencies.Infrastructure.Terraform.outputs['terraformOutput.TERRAFORM_APP_SERVICE_NAME']
+            ]
+          resourceGroupName:
+            $[ stageDependencies.Infrastructure.Terraform.outputs['terraformOutput.TERRAFORM_RESOURCE_GROUP_NAME']
+            ]
         steps:
-          # 📥 Download build artifacts
           - task: DownloadBuildArtifacts@0
             inputs:
-              buildType: "current"
-              downloadType: "single"
-              artifactName: "$(artifactName)"
-              downloadPath: "$(System.ArtifactsDirectory)"
-
-          # 🚀 Deploy to Azure App Service
+              buildType: current
+              downloadType: single
+              artifactName: $(artifactName)
+              downloadPath: $(System.ArtifactsDirectory)
           - task: AzureRmWebAppDeployment@4
             inputs:
-              ConnectionType: "AzureRM"
-              azureSubscription: "$(azureSubscription)"
-              appType: "webApp"
-              WebAppName: "$(appServiceName)"
-              ResourceGroupName: "$(resourceGroupName)"
-              packageForLinux: "$(packagePath)"
+              ConnectionType: AzureRM
+              azureSubscription: $(azureSubscription)
+              appType: webApp
+              WebAppName: $(appServiceName)
+              ResourceGroupName: $(resourceGroupName)
+              packageForLinux: $(packagePath)
               deployToSlotOrASE: false
-            displayName: "Deploy to Azure App Service"
-
-          # ✅ Verify deployment
+            displayName: Deploy to Azure App Service
           - task: AzureCLI@2
             inputs:
-              azureSubscription: "$(azureSubscription)"
-              scriptType: "pscore"
-              scriptLocation: "inlineScript"
-              inlineScript: |
-                Write-Host "Verifying deployment..."
-                $appUrl = az webapp show --name $(appServiceName) --resource-group $(resourceGroupName) --query defaultHostName --output tsv
-                Write-Host "Application URL: https://$appUrl"
-
-                # Optional: Test if the application is responding
-                try {
-                  $response = Invoke-WebRequest -Uri "https://$appUrl" -TimeoutSec 30
-                  Write-Host "Application is responding with status: $($response.StatusCode)"
-                } catch {
-                  Write-Warning "Could not verify application response: $($_.Exception.Message)"
-                }
-            displayName: "Verify Deployment"
+              azureSubscription: $(azureSubscription)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript:
+                "Write-Host \"Verifying deployment...\"\n$appUrl = az webapp\
+                \ show --name $(appServiceName) --resource-group $(resourceGroupName) --query\
+                \ defaultHostName --output tsv\nWrite-Host \"Application URL: https://$appUrl\"\
+                \n\n# Optional: Test if the application is responding\ntry {\n  $response\
+                \ = Invoke-WebRequest -Uri \"https://$appUrl\" -TimeoutSec 30\n  Write-Host\
+                \ \"Application is responding with status: $($response.StatusCode)\"\n}\
+                \ catch {\n  Write-Warning \"Could not verify application response: $($_.Exception.Message)\"\
+                \n}\n"
+            displayName: Verify Deployment
