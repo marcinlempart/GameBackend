@@ -40,7 +40,22 @@ output "ai_failed_requests_alert_id" {
   description = "ID of the Application Insights failed requests alert rule"
 }
 
+output "ai_exceptions_alert_id" {
+  value       = azurerm_monitor_metric_alert.ai_exceptions.id
+  description = "ID of the Application Insights exceptions alert rule"
+}
+
 output "alert_email" {
   value       = var.alert_email
   description = "Email address configured for alerts"
+}
+
+output "application_insights_id" {
+  value       = azurerm_application_insights.app_insights.id
+  description = "ID of the Application Insights resource"
+}
+
+output "application_insights_app_id" {
+  value       = azurerm_application_insights.app_insights.app_id
+  description = "App ID of the Application Insights resource"
 }

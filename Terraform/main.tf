@@ -78,7 +78,7 @@ resource "azurerm_monitor_action_group" "app_alerts" {
   }
 }
 
-# Alert na Application Insights - Server Response Time
+# Alert na Application Insights - Response Time (poprawiony)
 resource "azurerm_monitor_metric_alert" "ai_response_time" {
   name                = "${var.app_name}-ai-response-time"
   resource_group_name = azurerm_resource_group.rg.name
@@ -86,7 +86,8 @@ resource "azurerm_monitor_metric_alert" "ai_response_time" {
   description         = "Alert when Application Insights detects high response time"
   severity            = 2
   frequency           = "PT5M"
-  window_size         = "PT5M"
+  window_size         = "PT15M"
+  enabled             = true
 
   criteria {
     metric_namespace = "Microsoft.Insights/components"
@@ -94,20 +95,20 @@ resource "azurerm_monitor_metric_alert" "ai_response_time" {
     aggregation      = "Average"
     operator         = "GreaterThan"
     threshold        = 5000  # 5 sekund w milisekundach
-
-    dimension {
-      name     = "request/resultCode"
-      operator = "Include"
-      values   = ["*"]
-    }
+    
+    # Usunięte dimensions - często powodują problemy przy tworzeniu alertów
   }
 
   action {
     action_group_id = azurerm_monitor_action_group.app_alerts.id
   }
+
+  depends_on = [
+    azurerm_application_insights.app_insights
+  ]
 }
 
-# Alert na Application Insights - Request Count
+# Alert na Application Insights - Request Count (poprawiony)
 resource "azurerm_monitor_metric_alert" "ai_request_count" {
   name                = "${var.app_name}-ai-request-count"
   resource_group_name = azurerm_resource_group.rg.name
@@ -116,27 +117,28 @@ resource "azurerm_monitor_metric_alert" "ai_request_count" {
   severity            = 2
   frequency           = "PT5M"
   window_size         = "PT15M"
+  enabled             = true
 
   criteria {
     metric_namespace = "Microsoft.Insights/components"
     metric_name      = "requests/count"
     aggregation      = "Total"
     operator         = "GreaterThan"
-    threshold        = 10  # 10 requestów w 15 minut
-
-    dimension {
-      name     = "request/resultCode"
-      operator = "Include"
-      values   = ["307"]  # Specific dla kodu 307
-    }
+    threshold        = 100  # Zwiększony próg - 100 requestów w 15 minut
+    
+    # Usunięte specific dimensions dla kodu 307 - może powodować problemy
   }
 
   action {
     action_group_id = azurerm_monitor_action_group.app_alerts.id
   }
+
+  depends_on = [
+    azurerm_application_insights.app_insights
+  ]
 }
 
-# Alert na Application Insights - Failed Requests
+# Alert na Application Insights - Failed Requests (poprawiony)
 resource "azurerm_monitor_metric_alert" "ai_failed_requests" {
   name                = "${var.app_name}-ai-failed-requests"
   resource_group_name = azurerm_resource_group.rg.name
@@ -144,23 +146,52 @@ resource "azurerm_monitor_metric_alert" "ai_failed_requests" {
   description         = "Alert when Application Insights detects failed requests"
   severity            = 1
   frequency           = "PT5M"
-  window_size         = "PT5M"
+  window_size         = "PT15M"
+  enabled             = true
 
   criteria {
     metric_namespace = "Microsoft.Insights/components"
     metric_name      = "requests/failed"
     aggregation      = "Total"
     operator         = "GreaterThan"
-    threshold        = 5  # 5 nieudanych requestów
-
-    dimension {
-      name     = "request/resultCode"
-      operator = "Include"
-      values   = ["*"]
-    }
+    threshold        = 3  # Zmniejszony próg - 3 nieudane requesty
+    
+    # Usunięte dimensions
   }
 
   action {
     action_group_id = azurerm_monitor_action_group.app_alerts.id
   }
+
+  depends_on = [
+    azurerm_application_insights.app_insights
+  ]
+}
+
+# Dodatkowy alert na Application Insights - Exception Rate
+resource "azurerm_monitor_metric_alert" "ai_exceptions" {
+  name                = "${var.app_name}-ai-exceptions"
+  resource_group_name = azurerm_resource_group.rg.name
+  scopes              = [azurerm_application_insights.app_insights.id]
+  description         = "Alert when Application Insights detects exceptions"
+  severity            = 1
+  frequency           = "PT5M"
+  window_size         = "PT15M"
+  enabled             = true
+
+  criteria {
+    metric_namespace = "Microsoft.Insights/components"
+    metric_name      = "exceptions/count"
+    aggregation      = "Total"
+    operator         = "GreaterThan"
+    threshold        = 5  # 5 wyjątków w 15 minut
+  }
+
+  action {
+    action_group_id = azurerm_monitor_action_group.app_alerts.id
+  }
+
+  depends_on = [
+    azurerm_application_insights.app_insights
+  ]
 }
