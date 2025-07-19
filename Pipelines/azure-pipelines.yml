@@ -1,24 +1,29 @@
 trigger:
-  - master
+  branches:
+    include:
+      - main
 
 pool:
-  vmImage: windows-latest
+  vmImage: "windows-latest" # potrzebne dla MSBuild
 
 variables:
   solution: "**/*.sln"
-  buildPlatform: Any CPU
-  buildConfiguration: Release
-  azureSubscription: GameBackendServiceConnection
-  artifactName: drop
-  terraformWorkingDir: Terraform
-  packagePath: $(System.ArtifactsDirectory)/$(artifactName)/**/*.zip
-  appServiceName: game-backend-app
+  buildPlatform: "Any CPU"
+  buildConfiguration: "Release"
+  azureSubscription: "GameBackendServiceConnection"
+  artifactName: "drop"
+  terraformWorkingDir: "Terraform"
+  packagePath: "$(System.ArtifactsDirectory)/$(artifactName)/**/*.zip"
 
 stages:
+  # ===================================
+  # 1️⃣ BUILD & TEST .NET APLIKACJI
+  # ===================================
   - stage: Build
-    displayName: Build and Test
+    displayName: "Build and Test Application"
     jobs:
-      - job: Build
+      - job: BuildApp
+        displayName: "Build .NET App"
         steps:
           - task: NuGetToolInstaller@1
 
@@ -48,46 +53,23 @@ stages:
               PathtoPublish: $(build.artifactStagingDirectory)
               ArtifactName: $(artifactName)
 
+  # ===================================
+  # 2️⃣ PROVISION INFRA Z TERRAFORM
+  # ===================================
   - stage: Infrastructure
-    displayName: Provision Infrastructure with Terraform
+    displayName: "Provision Infrastructure with Terraform"
     dependsOn: Build
-    condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
     jobs:
-      - job: Terraform
+      - job: TerraformApply
+        displayName: "Terraform Apply"
         steps:
-          # Optional: install Terraform if missing
-          - powershell: |
-              Write-Host "Checking Terraform version..."
-              terraform -version
-            displayName: Check Terraform Version
-            continueOnError: true
-
-          - powershell: |
-              if (-not (Get-Command terraform -ErrorAction SilentlyContinue)) {
-                  Write-Host "Terraform not found. Installing..."
-                  choco install terraform -y --version=1.7.5
-              } else {
-                  Write-Host "Terraform is already installed."
-              }
-              terraform -version
-            displayName: Ensure Terraform Installed
-
-          # Azure CLI login
-          - task: AzureCLI@2
+          - task: TerraformInstaller@1
+            displayName: "Install Terraform"
             inputs:
-              azureSubscription: $(azureSubscription)
-              scriptType: pscore
-              scriptLocation: inlineScript
-              inlineScript: |
-                az account show
-                $subscriptionId = az account show --query id --output tsv
-                echo "##vso[task.setvariable variable=ARM_SUBSCRIPTION_ID]$subscriptionId"
-                Write-Host "Azure CLI authenticated successfully"
-                Write-Host "Subscription ID: $subscriptionId"
-            displayName: Azure Authentication Setup
+              terraformVersion: "latest"
 
-          # Terraform Init
           - task: AzureCLI@2
+            displayName: "Terraform Init & Apply"
             inputs:
               azureSubscription: $(azureSubscription)
               scriptType: pscore
@@ -96,53 +78,35 @@ stages:
               inlineScript: |
                 Write-Host "Initializing Terraform..."
                 terraform init
-            displayName: Terraform Init
 
-          # Terraform Plan
-          - task: AzureCLI@2
-            inputs:
-              azureSubscription: $(azureSubscription)
-              scriptType: pscore
-              scriptLocation: inlineScript
-              workingDirectory: $(terraformWorkingDir)
-              inlineScript: |
-                Write-Host "Creating Terraform plan..."
+                Write-Host "Planning Terraform..."
                 terraform plan -out=tfplan
-            displayName: Terraform Plan
 
-          # Terraform Apply
-          - task: AzureCLI@2
-            inputs:
-              azureSubscription: $(azureSubscription)
-              scriptType: pscore
-              scriptLocation: inlineScript
-              workingDirectory: $(terraformWorkingDir)
-              inlineScript: |
-                Write-Host "Applying Terraform configuration..."
+                Write-Host "Applying Terraform..."
                 terraform apply -auto-approve tfplan
 
-                # Capture outputs for next stage
+                Write-Host "Fetching Terraform outputs..."
                 $appServiceName = terraform output -raw app_service_name
                 $resourceGroupName = terraform output -raw resource_group_name
 
-                Write-Host "##vso[task.setvariable variable=TERRAFORM_APP_SERVICE_NAME;isOutput=true]$appServiceName"
-                Write-Host "##vso[task.setvariable variable=TERRAFORM_RESOURCE_GROUP_NAME;isOutput=true]$resourceGroupName"
+                Write-Host "##vso[task.setvariable variable=AppServiceName;isOutput=true]$appServiceName"
+                Write-Host "##vso[task.setvariable variable=ResourceGroupName;isOutput=true]$resourceGroupName"
 
-                Write-Host "Infrastructure provisioned successfully"
                 Write-Host "App Service Name: $appServiceName"
                 Write-Host "Resource Group: $resourceGroupName"
-            name: terraformOutput
-            displayName: Terraform Apply
 
+  # ===================================
+  # 3️⃣ DEPLOY DO AZURE APP SERVICE
+  # ===================================
   - stage: Deploy
-    displayName: Deploy to Azure App Service
+    displayName: "Deploy Application to Azure App Service"
     dependsOn: Infrastructure
-    condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
     jobs:
-      - job: Deploy
+      - job: DeployWebApp
+        displayName: "Deploy Web App"
         variables:
-          appServiceName: $[ stageDependencies.Infrastructure.Terraform.outputs['terraformOutput.TERRAFORM_APP_SERVICE_NAME'] ]
-          resourceGroupName: $[ stageDependencies.Infrastructure.Terraform.outputs['terraformOutput.TERRAFORM_RESOURCE_GROUP_NAME'] ]
+          appServiceName: $[ stageDependencies.Infrastructure.TerraformApply.outputs['AppServiceName'] ]
+          resourceGroupName: $[ stageDependencies.Infrastructure.TerraformApply.outputs['ResourceGroupName'] ]
         steps:
           - task: DownloadBuildArtifacts@0
             inputs:
@@ -151,18 +115,15 @@ stages:
               artifactName: $(artifactName)
               downloadPath: $(System.ArtifactsDirectory)
 
-          - task: AzureRmWebAppDeployment@4
+          - task: AzureWebApp@1
+            displayName: "Deploy App to Azure App Service"
             inputs:
-              ConnectionType: AzureRM
               azureSubscription: $(azureSubscription)
-              appType: webApp
-              WebAppName: $(appServiceName)
-              ResourceGroupName: $(resourceGroupName)
-              packageForLinux: $(packagePath)
-              deployToSlotOrASE: false
-            displayName: Deploy to Azure App Service
+              appName: $(appServiceName)
+              package: $(packagePath)
 
           - task: AzureCLI@2
+            displayName: "Verify Deployment"
             inputs:
               azureSubscription: $(azureSubscription)
               scriptType: pscore
@@ -171,12 +132,3 @@ stages:
                 Write-Host "Verifying deployment..."
                 $appUrl = az webapp show --name $(appServiceName) --resource-group $(resourceGroupName) --query defaultHostName --output tsv
                 Write-Host "Application URL: https://$appUrl"
-
-                # Optional: Test application response
-                try {
-                  $response = Invoke-WebRequest -Uri "https://$appUrl" -TimeoutSec 30
-                  Write-Host "Application is responding with status: $($response.StatusCode)"
-                } catch {
-                  Write-Warning "Could not verify application response: $($_.Exception.Message)"
-                }
-            displayName: Verify Deployment
