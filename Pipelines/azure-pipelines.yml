@@ -4,15 +4,13 @@ trigger:
       - main
 
 variables:
-  solution: "**/*.sln"
+  solution: "GameBackend/**/*.sln"
   buildPlatform: "Any CPU"
   buildConfiguration: "Release"
   azureSubscription: "GameBackendServiceConnection"
   artifactName: "drop"
   terraformWorkingDir: "Terraform"
   packagePath: "$(System.ArtifactsDirectory)/$(artifactName)/**/*.zip"
-  appServiceName: "game-backend-app"
-  resourceGroupName: "game-backend-rg"
 
 stages:
   # ===================================
@@ -66,7 +64,6 @@ stages:
         pool:
           vmImage: "ubuntu-latest"
         steps:
-          # ✅ Install Terraform on Linux agent
           - script: |
               echo "Installing Terraform..."
               sudo apt-get update && sudo apt-get install -y unzip wget
@@ -76,7 +73,6 @@ stages:
               terraform -version
             displayName: "Install Terraform"
 
-          # ✅ Terraform Init, Plan, Apply
           - task: AzureCLI@2
             displayName: "Terraform Init & Apply"
             inputs:
@@ -87,6 +83,9 @@ stages:
               inlineScript: |
                 echo "Initializing Terraform..."
                 terraform init
+
+                echo "Importing existing resource group if exists..."
+                terraform import azurerm_resource_group.rg /subscriptions/171eb711-b76d-49e7-a653-d91675596edb/resourceGroups/rg-game-backend || echo "Import failed or already exists"
 
                 echo "Planning Terraform..."
                 terraform plan -out=tfplan
@@ -118,7 +117,7 @@ stages:
             inputs:
               azureSubscription: $(azureSubscription)
               appType: webApp
-              WebAppName: $(appServiceName)
+              WebAppName: "game-backend-app"
               Package: $(packagePath)
 
           - task: AzureCLI@2
@@ -129,5 +128,5 @@ stages:
               scriptLocation: inlineScript
               inlineScript: |
                 echo "Verifying deployment..."
-                APP_URL=$(az webapp show --name $(appServiceName) --resource-group $(resourceGroupName) --query defaultHostName --output tsv)
+                APP_URL=$(az webapp show --name "game-backend-app" --resource-group "rg-game-backend" --query defaultHostName --output tsv)
                 echo "Application URL: https://$APP_URL"
