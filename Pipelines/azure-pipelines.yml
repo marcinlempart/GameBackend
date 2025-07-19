@@ -4,7 +4,7 @@ trigger:
       - main
 
 variables:
-  solution: "GameBackend/**/*.sln"
+  solution: "**/*.sln"
   buildPlatform: "Any CPU"
   buildConfiguration: "Release"
   azureSubscription: "GameBackendServiceConnection"
