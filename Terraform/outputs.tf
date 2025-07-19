@@ -25,14 +25,19 @@ output "alert_action_group_id" {
   description = "ID of the action group for alerts"
 }
 
-output "high_response_time_alert_id" {
-  value       = azurerm_monitor_metric_alert.high_response_time.id
-  description = "ID of the high response time alert rule"
+output "ai_response_time_alert_id" {
+  value       = azurerm_monitor_metric_alert.ai_response_time.id
+  description = "ID of the Application Insights response time alert rule"
 }
 
-output "high_request_count_alert_id" {
-  value       = azurerm_monitor_metric_alert.high_request_count.id
-  description = "ID of the high request count alert rule"
+output "ai_request_count_alert_id" {
+  value       = azurerm_monitor_metric_alert.ai_request_count.id
+  description = "ID of the Application Insights request count alert rule"
+}
+
+output "ai_failed_requests_alert_id" {
+  value       = azurerm_monitor_metric_alert.ai_failed_requests.id
+  description = "ID of the Application Insights failed requests alert rule"
 }
 
 output "alert_email" {
