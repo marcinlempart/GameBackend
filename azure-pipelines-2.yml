@@ -10,10 +10,11 @@ variables:
   buildConfiguration: 'Release'
   azureSubscription: 'GameBackendServiceConnection'
   artifactName: 'drop'
-  terraformWorkingDir: 'terraform'
+  terraformWorkingDir: 'Terraform' # 📁 Folder w repo z dużej litery
   packagePath: '$(System.ArtifactsDirectory)/$(artifactName)/**/*.zip'
 
 stages:
+# 🏗️ Build and Test Stage
 - stage: Build
   displayName: 'Build and Test'
   jobs:
@@ -47,6 +48,7 @@ stages:
         PathtoPublish: '$(build.artifactStagingDirectory)'
         ArtifactName: '$(artifactName)'
 
+# 🌱 Provision Infrastructure with Terraform
 - stage: Infrastructure
   displayName: 'Provision Infrastructure with Terraform'
   dependsOn: Build
@@ -54,6 +56,11 @@ stages:
   jobs:
   - job: Terraform
     steps:
+    # 🛠️ Install Terraform CLI
+    - powershell: |
+        choco install terraform -y
+      displayName: 'Install Terraform CLI'
+
     # 🌱 Run Terraform init & apply
     - task: AzureCLI@2
       inputs:
@@ -62,10 +69,16 @@ stages:
         scriptLocation: inlineScript
         inlineScript: |
           cd $(terraformWorkingDir)
-          az account show
           terraform init
           terraform apply -auto-approve
+          terraform output -raw app_service_name > ../app_service_name.txt
+      displayName: 'Terraform Init & Apply'
 
+    # 📤 Publish App Service name for Deploy Stage
+    - publish: app_service_name.txt
+      artifact: appServiceName
+
+# 🚀 Deploy Stage
 - stage: Deploy
   displayName: 'Deploy to Azure App Service'
   dependsOn: Infrastructure
@@ -81,11 +94,24 @@ stages:
         artifactName: '$(artifactName)'
         downloadPath: '$(System.ArtifactsDirectory)'
 
+    # 📥 Download App Service name artifact
+    - task: DownloadBuildArtifacts@0
+      inputs:
+        artifactName: 'appServiceName'
+        downloadPath: '$(System.DefaultWorkingDirectory)'
+
+    # 💾 Set App Service name variable
+    - powershell: |
+        $appName = Get-Content "$(System.DefaultWorkingDirectory)/app_service_name.txt"
+        Write-Host "##vso[task.setvariable variable=appServiceName]$appName"
+      displayName: 'Set App Service Name variable'
+
     # 🚀 Deploy to Azure App Service
     - task: AzureRmWebAppDeployment@4
       inputs:
         ConnectionType: 'AzureRM'
         azureSubscription: '$(azureSubscription)'
         appType: 'webApp'
-        WebAppName: 'game-backend-app' # albo użyj outputu TF
+        WebAppName: '$(appServiceName)' # Dynamic from Terraform
         packageForLinux: '$(packagePath)'
+      displayName: 'Deploy to Azure App Service'
