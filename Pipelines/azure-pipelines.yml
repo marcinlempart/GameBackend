@@ -62,11 +62,19 @@ stages:
       - job: TerraformApply
         displayName: "Terraform Apply"
         pool:
-          vmImage: "ubuntu-latest" # 🚀 Linux agent z preinstalowanym Terraform
+          vmImage: "ubuntu-latest"
         steps:
-          - script: terraform -version
-            displayName: "Check Terraform Version"
+          # ✅ Install Terraform on Linux agent
+          - script: |
+              echo "Installing Terraform..."
+              sudo apt-get update && sudo apt-get install -y unzip wget
+              wget https://releases.hashicorp.com/terraform/1.7.5/terraform_1.7.5_linux_amd64.zip
+              unzip terraform_1.7.5_linux_amd64.zip
+              sudo mv terraform /usr/local/bin/
+              terraform -version
+            displayName: "Install Terraform"
 
+          # ✅ Terraform Init, Plan, Apply
           - task: AzureCLI@2
             displayName: "Terraform Init & Apply"
             inputs:
@@ -104,7 +112,7 @@ stages:
       - job: DeployWebApp
         displayName: "Deploy Web App"
         pool:
-          vmImage: "ubuntu-latest" # 🚀 Linux agent
+          vmImage: "ubuntu-latest"
         variables:
           appServiceName: $[ stageDependencies.Infrastructure.TerraformApply.outputs['AppServiceName'] ]
           resourceGroupName: $[ stageDependencies.Infrastructure.TerraformApply.outputs['ResourceGroupName'] ]
