@@ -1,4 +1,9 @@
 
+variable "alert_name" {
+  description = "Nazwa alertu"
+  type        = string
+}
+
 variable "resource_group_name" {
   description = "Resource group dla Application Insights"
   type        = string
