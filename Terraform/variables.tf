@@ -1,32 +1,30 @@
-
 variable "resource_group_name" {
-  description = "Resource group dla Application Insights"
+  description = "Name of the resource group"
   type        = string
+  default     = "rg-game-backend"
 }
 
-variable "app_insights_name" {
-  description = "Nazwa Application Insights"
+variable "location" {
+  description = "Azure region for resources"
   type        = string
+  default     = "West Europe"
 }
 
-variable "alert_email_group_1" {
-  description = "Obowiązkowa grupa mailowa"
+variable "app_name" {
+  description = "Name of the application"
   type        = string
+  default     = "game-backend-app"
 }
 
-variable "alert_email_group_2" {
-  description = "Opcjonalna grupa mailowa 2"
+variable "alert_email" {
+  description = "Email address for receiving alerts"
   type        = string
-  default     = ""
+  default     = "marcin.lempart@gmail.com"  # Zmień na swój email
 }
 
-variable "alert_email_group_3" {
-  description = "Opcjonalna grupa mailowa 3"
-  type        = string
-  default     = ""
-}
-
-variable "alert_threshold" {
-  description = "Próg uruchomienia alertu"
-  type        = number
-}
+# Optional: Add subscription_id variable if you need to explicitly set it
+# variable "subscription_id" {
+#   description = "Azure subscription ID"
+#   type        = string
+#   sensitive   = true
+# }
